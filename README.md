@@ -174,7 +174,7 @@ SafeBite-Blockchain-Food-Traceability/
 
 ## Development Status
 
-- ✅ Smart contracts are implemented
+- ⏳ Smart contracts are in development (structure defined, functions need implementation)
 - ⏳ Backend API is being developed
 - ⏳ Frontend interface is planned
 - ⏳ Test suite is planned
