@@ -1,9 +1,4 @@
-/**
- * @file Main backend server file
- * @notice Express server for SafeBite API endpoints
- * @dev Basic server setup - routes and controllers to be implemented
- */
-
+// Main backend server file
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');

@@ -206,7 +206,7 @@ contract SafeBiteSupplyChain {
     }
     
     // Check if a product exists by checking if product ID is registered
-    function productExists(uint256 productId) external view returns (bool exists) {
+    function isProductExists(uint256 productId) external view returns (bool exists) {
         // TODO: Implementation
         // - Return true if product ID is registered
     }

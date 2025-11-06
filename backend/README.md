@@ -1,43 +1,74 @@
-# SafeBite Backend
+# SafeBite Backend API
 
 ## Overview
 
-Basic backend setup for SafeBite API server. This is a skeleton structure that will be implemented later.
+Express.js backend server for the SafeBite blockchain food traceability system. Currently set up with basic server configuration and middleware. API routes and contract integration will be implemented in future development.
 
-## Setup
+## Setup Instructions
 
-1. Install dependencies:
+### 1. Install Dependencies
+
 ```bash
 npm install
 ```
 
-2. Copy environment file:
+This installs Express, ethers.js, and other required packages.
+
+### 2. Environment Configuration
+
+Copy the example environment file:
+
 ```bash
 cp .env.example .env
 ```
 
-3. Configure `.env` with:
-   - RPC_URL: Ethereum RPC endpoint
-   - Contract addresses (after deployment)
-   - PORT: Server port (default: 3000)
+Edit `.env` and add:
+- `RPC_URL`: Ethereum RPC endpoint (Sepolia testnet or local)
+- `ACCESS_CONTROL_CONTRACT_ADDRESS`: Deployed access control contract address
+- `SUPPLY_CHAIN_CONTRACT_ADDRESS`: Deployed supply chain contract address
+- `PORT`: Server port number (default: 3000)
 
-4. Run server:
+### 3. Run the Server
+
+Development mode (with auto-reload):
 ```bash
-npm run dev  # Development mode
-# or
-npm start    # Production mode
+npm run dev
 ```
 
-## Structure
+Production mode:
+```bash
+npm start
+```
 
-- `server.js` - Main server file
-- `package.json` - Dependencies
-- `.env.example` - Environment variable template
+The server runs on `http://localhost:3000` by default.
 
-## TODO
+## Current Features
 
-- Implement API routes
-- Add controllers for business logic
-- Add service layer for smart contract interactions
-- Add error handling and validation
+- Express server with CORS enabled
+- Body parser middleware for JSON requests
+- Health check endpoint at `/health`
+- Basic error handling middleware
+- Environment variable configuration
 
+## Project Structure
+
+```
+backend/
+├── server.js          # Main Express server
+├── package.json       # Dependencies and scripts
+├── .env.example       # Environment variable template
+└── README.md          # This file
+```
+
+## Dependencies
+
+- **express**: Web framework
+- **ethers**: Ethereum library for contract interactions
+- **cors**: Cross-origin resource sharing
+- **dotenv**: Environment variable management
+- **body-parser**: Request body parsing
+- **nodemon**: Development auto-reload (dev dependency)
+
+## Development Status
+
+Current stage: Basic server setup complete. API routes and smart contract integration will be implemented in future development.

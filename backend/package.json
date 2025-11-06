@@ -16,13 +16,13 @@
   "author": "SafeBite Team",
   "license": "Apache-2.0",
   "dependencies": {
-    "express": "^4.18.2",
-    "ethers": "^6.8.0",
+    "express": "^4.21.2",
+    "ethers": "^6.15.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "body-parser": "^1.20.2"
+    "dotenv": "^17.2.3",
+    "body-parser": "^2.2.0"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.1.9"
   }
 }
