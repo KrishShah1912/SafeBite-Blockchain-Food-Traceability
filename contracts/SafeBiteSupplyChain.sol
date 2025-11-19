@@ -203,10 +203,9 @@ function updateProductMetadata(
 uint256 productId,
 string memory newMetadataHash
 ) external productExists(productId) onlyOwner(productId) {
-// TODO: Implementation
-// - Validate new metadata hash is not empty
-// - Update metadata hash in Product struct
-// - Emit ProductMetadataUpdated event
+require(bytes(newMetadataHash).length > 0, "SafeBiteSupplyChain: metadata hash cannot be empty");
+_products[productId].metadataHash = newMetadataHash;
+emit ProductMetadataUpdated(productId, newMetadataHash);
 }
 
 // Get all information about a product by its ID
@@ -251,17 +250,36 @@ uint256 productId,
 address to,
 string memory shipmentDetails
 ) external productExists(productId) onlyOwner(productId) {
-// TODO: Implementation
-// - Validate 'to' address is not zero and not current owner
-// - Validate recipient has appropriate role (DISTRIBUTOR, RETAILER, or CONSUMER)
-// - Create Transfer record
-// - Update current owner mapping
-// - Add transfer to history
-// - Update product status based on recipient role:
-// - DISTRIBUTOR => SHIPPED
-// - RETAILER => RECEIVED
-// - CONSUMER => DELIVERED
-// - Emit OwnershipTransferred and StatusUpdated events
+require(to != address(0), "SafeBiteSupplyChain: cannot transfer to zero address");
+require(to != msg.sender, "SafeBiteSupplyChain: cannot transfer to yourself");
+address from = _currentOwners[productId];
+SafeBiteAccessRoles.Role recipientRole = accessControl.getRole(to);
+require(
+recipientRole == SafeBiteAccessRoles.Role.DISTRIBUTOR ||
+recipientRole == SafeBiteAccessRoles.Role.RETAILER ||
+recipientRole == SafeBiteAccessRoles.Role.CONSUMER,
+"SafeBiteSupplyChain: recipient must be DISTRIBUTOR, RETAILER, or CONSUMER"
+);
+ProductStatus oldStatus = _productStatuses[productId];
+ProductStatus newStatus;
+if (recipientRole == SafeBiteAccessRoles.Role.DISTRIBUTOR) {
+newStatus = ProductStatus.SHIPPED;
+} else if (recipientRole == SafeBiteAccessRoles.Role.RETAILER) {
+newStatus = ProductStatus.RECEIVED;
+} else {
+newStatus = ProductStatus.DELIVERED;
+}
+Transfer memory transfer = Transfer({
+from: from,
+to: to,
+timestamp: block.timestamp,
+shipmentDetails: shipmentDetails
+});
+_transferHistory[productId].push(transfer);
+_currentOwners[productId] = to;
+_productStatuses[productId] = newStatus;
+emit OwnershipTransferred(productId, from, to, shipmentDetails);
+emit StatusUpdated(productId, oldStatus, newStatus, msg.sender);
 }
 
 // Transfer multiple products to the same recipient in one transaction
@@ -271,11 +289,40 @@ uint256[] memory productIds,
 address to,
 string memory shipmentDetails
 ) external {
-// TODO: Implementation
-// - Validate all products exist and belong to msg.sender
-// - Validate recipient address and role
-// - Transfer each product individually
-// - Emit events for each transfer
+require(to != address(0), "SafeBiteSupplyChain: cannot transfer to zero address");
+SafeBiteAccessRoles.Role recipientRole = accessControl.getRole(to);
+require(
+recipientRole == SafeBiteAccessRoles.Role.DISTRIBUTOR ||
+recipientRole == SafeBiteAccessRoles.Role.RETAILER ||
+recipientRole == SafeBiteAccessRoles.Role.CONSUMER,
+"SafeBiteSupplyChain: recipient must be DISTRIBUTOR, RETAILER, or CONSUMER"
+);
+for (uint256 i = 0; i < productIds.length; i++) {
+uint256 productId = productIds[i];
+require(_products[productId].id != 0, "SafeBiteSupplyChain: product does not exist");
+require(_currentOwners[productId] == msg.sender, "SafeBiteSupplyChain: caller is not the product owner");
+address from = _currentOwners[productId];
+ProductStatus oldStatus = _productStatuses[productId];
+ProductStatus newStatus;
+if (recipientRole == SafeBiteAccessRoles.Role.DISTRIBUTOR) {
+newStatus = ProductStatus.SHIPPED;
+} else if (recipientRole == SafeBiteAccessRoles.Role.RETAILER) {
+newStatus = ProductStatus.RECEIVED;
+} else {
+newStatus = ProductStatus.DELIVERED;
+}
+Transfer memory transfer = Transfer({
+from: from,
+to: to,
+timestamp: block.timestamp,
+shipmentDetails: shipmentDetails
+});
+_transferHistory[productId].push(transfer);
+_currentOwners[productId] = to;
+_productStatuses[productId] = newStatus;
+emit OwnershipTransferred(productId, from, to, shipmentDetails);
+emit StatusUpdated(productId, oldStatus, newStatus, msg.sender);
+}
 }
 
 // Update product status (e.g., from RECEIVED to STORED)
@@ -285,11 +332,25 @@ function updateStatus(
 uint256 productId,
 ProductStatus newStatus
 ) external productExists(productId) onlyOwner(productId) {
-// TODO: Implementation
-// - Validate status transition is valid
-// - Store old status
-// - Update status mapping
-// - Emit StatusUpdated event
+ProductStatus oldStatus = _productStatuses[productId];
+require(newStatus != oldStatus, "SafeBiteSupplyChain: status is already set to this value");
+if (oldStatus == ProductStatus.DELIVERED) {
+require(false, "SafeBiteSupplyChain: cannot change status after DELIVERED");
+}
+if (oldStatus == ProductStatus.CREATED && newStatus != ProductStatus.SHIPPED) {
+require(false, "SafeBiteSupplyChain: CREATED can only transition to SHIPPED");
+}
+if (oldStatus == ProductStatus.SHIPPED && newStatus != ProductStatus.RECEIVED) {
+require(false, "SafeBiteSupplyChain: SHIPPED can only transition to RECEIVED");
+}
+if (oldStatus == ProductStatus.RECEIVED && newStatus != ProductStatus.STORED && newStatus != ProductStatus.DELIVERED) {
+require(false, "SafeBiteSupplyChain: RECEIVED can only transition to STORED or DELIVERED");
+}
+if (oldStatus == ProductStatus.STORED && newStatus != ProductStatus.DELIVERED) {
+require(false, "SafeBiteSupplyChain: STORED can only transition to DELIVERED");
+}
+_productStatuses[productId] = newStatus;
+emit StatusUpdated(productId, oldStatus, newStatus, msg.sender);
 }
 
 // Verify product authenticity (anyone can verify)
@@ -299,13 +360,22 @@ function verifyAuthenticity(
 uint256 productId,
 string memory notes
 ) external productExists(productId) returns (bool isValid) {
-// TODO: Implementation
-// - Check product hasn't been tampered with
-// - Verify metadata hash integrity
-// - Create Verification record
-// - Set authenticity flag if valid
-// - Emit ProductVerified and AuthenticityConfirmed events
-// - Return verification result
+Product memory product = _products[productId];
+bool isAuthentic = bytes(product.metadataHash).length > 0 && product.producer != address(0);
+Verification memory verification = Verification({
+verifier: msg.sender,
+timestamp: block.timestamp,
+vType: VerificationType.AUTHENTICITY,
+result: isAuthentic,
+notes: notes
+});
+_verificationHistory[productId].push(verification);
+if (isAuthentic) {
+_authenticityFlags[productId] = true;
+emit AuthenticityConfirmed(productId, msg.sender);
+}
+emit ProductVerified(productId, msg.sender, VerificationType.AUTHENTICITY, isAuthentic);
+return isAuthentic;
 }
 
 // Perform quality check on product
@@ -316,12 +386,22 @@ uint256 productId,
 uint8 qualityScore,
 string memory notes
 ) external productExists(productId) {
-// TODO: Implementation
-// - Validate caller has RETAILER or REGULATOR role
-// - Validate quality score is within range (0-100)
-// - Create Verification record with QUALITY_CHECK type
-// - Update product status if quality fails
-// - Emit ProductVerified event
+require(
+accessControl.hasRole(msg.sender, SafeBiteAccessRoles.Role.RETAILER) ||
+accessControl.hasRole(msg.sender, SafeBiteAccessRoles.Role.REGULATOR),
+"SafeBiteSupplyChain: caller must be RETAILER or REGULATOR"
+);
+require(qualityScore <= 100, "SafeBiteSupplyChain: quality score must be 0-100");
+bool passed = qualityScore >= 50;
+Verification memory verification = Verification({
+verifier: msg.sender,
+timestamp: block.timestamp,
+vType: VerificationType.QUALITY_CHECK,
+result: passed,
+notes: notes
+});
+_verificationHistory[productId].push(verification);
+emit ProductVerified(productId, msg.sender, VerificationType.QUALITY_CHECK, passed);
 }
 
 // Check regulatory compliance
@@ -332,10 +412,20 @@ uint256 productId,
 bool compliant,
 string memory certificateHash
 ) external productExists(productId) onlyRegulator {
-// TODO: Implementation
-// - Create Verification record with REGULATORY_APPROVAL type
-// - Store certificate hash if compliant
-// - Emit ComplianceChecked and ProductVerified events
+Verification memory verification = Verification({
+verifier: msg.sender,
+timestamp: block.timestamp,
+vType: VerificationType.REGULATORY_APPROVAL,
+result: compliant,
+notes: certificateHash
+});
+_verificationHistory[productId].push(verification);
+if (compliant && bytes(certificateHash).length > 0) {
+_products[productId].metadataHash = certificateHash;
+emit ProductMetadataUpdated(productId, certificateHash);
+}
+emit ComplianceChecked(productId, msg.sender, compliant);
+emit ProductVerified(productId, msg.sender, VerificationType.REGULATORY_APPROVAL, compliant);
 }
 
 // Get current owner/custodian of a product
@@ -346,8 +436,7 @@ return _currentOwners[productId]                                                
 // Get complete transfer history for a product
 // Returns array of all Transfer records showing ownership changes
 function getTransferHistory(uint256 productId) external view productExists(productId) returns (Transfer[] memory transfers) {
-// TODO: Implementation
-// - Return complete transfer history array
+return _transferHistory[productId];
 }
 
 // Get current status of a product
@@ -358,24 +447,42 @@ return _productStatuses[productId]                                              
 // Get all verification records for a product
 // Shows quality checks, compliance checks, authenticity verifications
 function getVerificationHistory(uint256 productId) external view productExists(productId) returns (Verification[] memory verifications) {
-// TODO: Implementation
-// - Return all verification records
+return _verificationHistory[productId];
 }
 
 // Check if product has been verified as authentic
 function isProductAuthentic(uint256 productId) external view productExists(productId) returns (bool isAuthentic) {
-// TODO: Implementation
-// - Return authenticity flag
+return _authenticityFlags[productId];
 }
 
 // Get product journey as readable strings
 // Combines registration, transfers, and status updates into a timeline
 // Returns array of strings describing each event in chronological order
 function getProductJourney(uint256 productId) external view productExists(productId) returns (string[] memory journey) {
-// TODO: Implementation
-// - Combine registration, transfers, and status updates
-// - Format as readable strings
-// - Return in chronological order
+Product memory product = _products[productId];
+uint256 transferCount = _transferHistory[productId].length;
+uint256 totalEvents = 1 + transferCount;
+string[] memory events = new string[](totalEvents);
+events[0] = string(abi.encodePacked(
+"Product registered: ",
+product.name,
+" (Batch: ",
+product.batchId,
+") by producer at ",
+uint2str(product.createdAt)
+));
+for (uint256 i = 0; i < transferCount; i++) {
+Transfer memory transfer = _transferHistory[productId][i];
+events[i + 1] = string(abi.encodePacked(
+"Transferred from ",
+addressToString(transfer.from),
+" to ",
+addressToString(transfer.to),
+" at ",
+uint2str(transfer.timestamp)
+));
+}
+return events;
 }
 
 // Get complete provenance record
@@ -383,9 +490,109 @@ function getProductJourney(uint256 productId) external view productExists(produc
 // Returns as structured data (JSON-like string)
 // Note: Consider gas costs for large strings
 function getCompleteProvenance(uint256 productId) external view productExists(productId) returns (string memory provenance) {
-// TODO: Implementation
-// - Combine all product data, transfers, status updates, verifications
-// - Format as structured data
-// - Return comprehensive provenance record
+Product memory product = _products[productId];
+string memory result = string(abi.encodePacked(
+'{"productId":',
+uint2str(productId),
+',"name":"',
+product.name,
+'","batchId":"',
+product.batchId,
+'","producer":"',
+addressToString(product.producer),
+'","createdAt":',
+uint2str(product.createdAt),
+',"origin":"',
+product.origin,
+'","metadataHash":"',
+product.metadataHash,
+'","currentOwner":"',
+addressToString(_currentOwners[productId]),
+'","status":',
+uint2str(uint256(_productStatuses[productId])),
+',"authentic":',
+_authenticityFlags[productId] ? 'true' : 'false',
+',"transfers":['));
+uint256 transferCount = _transferHistory[productId].length;
+for (uint256 i = 0; i < transferCount; i++) {
+Transfer memory transfer = _transferHistory[productId][i];
+if (i > 0) {
+result = string(abi.encodePacked(result, ','));
+}
+result = string(abi.encodePacked(
+result,
+'{"from":"',
+addressToString(transfer.from),
+'","to":"',
+addressToString(transfer.to),
+'","timestamp":',
+uint2str(transfer.timestamp),
+',"details":"',
+transfer.shipmentDetails,
+'"}'
+));
+}
+result = string(abi.encodePacked(result, '],"verifications":['));
+uint256 verificationCount = _verificationHistory[productId].length;
+for (uint256 i = 0; i < verificationCount; i++) {
+Verification memory verification = _verificationHistory[productId][i];
+if (i > 0) {
+result = string(abi.encodePacked(result, ','));
+}
+string memory vTypeStr = verification.vType == VerificationType.QUALITY_CHECK ? 'QUALITY_CHECK' :
+verification.vType == VerificationType.REGULATORY_APPROVAL ? 'REGULATORY_APPROVAL' :
+verification.vType == VerificationType.AUTHENTICITY ? 'AUTHENTICITY' : 'COMPLIANCE';
+result = string(abi.encodePacked(
+result,
+'{"verifier":"',
+addressToString(verification.verifier),
+'","timestamp":',
+uint2str(verification.timestamp),
+',"type":"',
+vTypeStr,
+'","result":',
+verification.result ? 'true' : 'false',
+',"notes":"',
+verification.notes,
+'"}'
+));
+}
+result = string(abi.encodePacked(result, ']}'));
+return result;
+}
+// Helper function to convert uint256 to string
+function uint2str(uint256 _i) internal pure returns (string memory) {
+if (_i == 0) {
+return "0";
+}
+uint256 j = _i;
+uint256 len;
+while (j != 0) {
+len++;
+j /= 10;
+}
+bytes memory bstr = new bytes(len);
+uint256 k = len;
+while (_i != 0) {
+k = k - 1;
+uint8 temp = (48 + uint8(_i - _i / 10 * 10));
+bytes1 b1 = bytes1(temp);
+bstr[k] = b1;
+_i /= 10;
+}
+return string(bstr);
+}
+// Helper function to convert address to string
+function addressToString(address _addr) internal pure returns (string memory) {
+bytes32 value = bytes32(uint256(uint160(_addr)));
+bytes memory alphabet = "0123456789abcdef";
+bytes memory str = new bytes(42);
+str[0] = '0';
+str[1] = 'x';
+for (uint256 i = 0; i < 20; i++) {
+str[2 + i * 2] = alphabet[uint8(value[i + 12] >> 4)];
+str[3 + i * 2] = alphabet[uint8(value[i + 12] & 0x0f)];
+}
+return string(str);
 }
 }
